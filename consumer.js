@@ -1,8 +1,13 @@
+require('dotenv').config();
 const axios = require('axios');
 
 async function fetchProgrammingJoke() {
     // The URL (Endpoint) of the API
-    const url = "https://v2.jokeapi.dev/joke/Programming?type=single";
+    const url = process.env.API_URL;
+    if (!url) {
+        console.error("Error: API_URL is missing from .env file");
+        return;
+    }
 
     console.log(`1. Sending request to: ${url}`);
 
