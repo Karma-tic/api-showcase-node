@@ -94,11 +94,3 @@ Send a message from Tab 1 and watch it appear instantly in Tab 2.
 This project uses a .env file (not included in the repo) to manage sensitive configuration. The .gitignore file ensures system files and secrets are not pushed to production.
 
 
-### **Step 3: Push the Documentation**
-
-Now, let's send this file to GitHub so your repository looks complete.
-
-```bash
-git add README.md
-git commit -m "Docs: Added comprehensive README with setup instructions"
-git push
