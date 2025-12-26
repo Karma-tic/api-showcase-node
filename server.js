@@ -1,3 +1,5 @@
+const { graphqlHTTP } = require('express-graphql');
+const { buildSchema } = require('graphql');
 const express = require('express');
 // Import the File System module (fs) with promises support
 const fs = require('fs').promises;
@@ -66,7 +68,43 @@ app.post('/api/projects', async (req, res) => {
         res.status(500).json({ message: "Error saving data" });
     }
 });
+const schema = buildSchema(`
+    type Project {
+        id: Int
+        name: String
+        status: String
+    }
 
+    type Query {
+        message: String
+        projects: [Project]
+        project(id: Int!): Project
+    }
+`);
+
+// 2. The Root Resolver: Functions that actually get the data
+const root = {
+    // specific field
+    message: () => "Hello from GraphQL!",
+    
+    // returns all projects (re-using our readData function from before!)
+    projects: async () => {
+        return await readData();
+    },
+    
+    // returns a single project by ID
+    project: async ({ id }) => {
+        const data = await readData();
+        return data.find(p => p.id === id);
+    }
+};
+
+// 3. The Endpoint: Where the magic happens
+app.use('/graphql', graphqlHTTP({
+    schema: schema,
+    rootValue: root,
+    graphiql: true // This enables a cool visual testing tool in the browser
+}));
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
