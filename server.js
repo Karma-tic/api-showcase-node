@@ -1,80 +1,88 @@
-const { graphqlHTTP } = require('express-graphql');
-const { buildSchema } = require('graphql');
+require('dotenv').config();
 const express = require('express');
-// Import the File System module (fs) with promises support
 const fs = require('fs').promises;
 const path = require('path');
+const { graphqlHTTP } = require('express-graphql');
+const { buildSchema } = require('graphql');
+const http = require('http'); // Required for WebSockets
+const WebSocket = require('ws'); // Required for WebSockets
 
 const app = express();
 const PORT = 3000;
 
-// Path to our JSON file
+// Path to our JSON file (Persistence)
 const DB_PATH = path.join(__dirname, 'projects.json');
 
+// Middleware to parse JSON bodies
 app.use(express.json());
 
-// Helper function to read data
+// --- HELPER FUNCTION: DATABASE ACCESS ---
 async function readData() {
     try {
         const data = await fs.readFile(DB_PATH, 'utf8');
         return JSON.parse(data);
     } catch (error) {
-        // If file doesn't exist, return empty array
+        // If file doesn't exist or is empty, return empty array
         return [];
     }
 }
 
+// --- REST API ROUTES ---
+
+// 1. Home Page
 app.get('/', (req, res) => {
-    res.send("<h1>Welcome to the API Showcase!</h1><p>Visit <a href='/api/projects'>/api/projects</a> to see the data.</p>");
+    res.send(`
+        <h1>API Showcase Server</h1>
+        <p>Your server is running successfully.</p>
+        <ul>
+            <li><a href='/api/projects'>REST API: /api/projects</a></li>
+            <li><a href='/graphql'>GraphQL Playground: /graphql</a></li>
+            <li>WebSocket endpoint: ws://localhost:${PORT}</li>
+        </ul>
+    `);
 });
 
-// 1. GET Request: Read from FILE
+// 2. REST GET: Read data
 app.get('/api/projects', async (req, res) => {
     try {
-        const projects = await readData(); // Read from file
-        res.json({
-            message: "Success",
-            data: projects
-        });
+        const projects = await readData();
+        res.json({ message: "Success", data: projects });
     } catch (error) {
         res.status(500).json({ message: "Error reading database" });
     }
 });
 
-// 2. POST Request: Write to FILE
+// 3. REST POST: Create data
 app.post('/api/projects', async (req, res) => {
     try {
-        // 1. Read existing data first
         const projects = await readData();
-        
-        // 2. Create new project object
         const newProject = req.body;
+        
+        // Auto-increment ID and set default status
         newProject.id = projects.length + 1;
         newProject.status = newProject.status || "Pending";
 
-        // 3. Add to array
         projects.push(newProject);
 
-        // 4. WRITE back to file (The Persistence Step!)
-        // null, 2 makes the JSON pretty and readable
+        // Write back to file (Persistence)
         await fs.writeFile(DB_PATH, JSON.stringify(projects, null, 2));
 
-        res.status(201).json({
-            message: "Project created and saved to disk",
-            data: newProject
-        });
+        res.status(201).json({ message: "Project saved", data: newProject });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Error saving data" });
     }
 });
+
+// --- GRAPHQL SETUP ---
+
+// Define Schema
 const schema = buildSchema(`
     type Project {
         id: Int
         name: String
         status: String
     }
-
     type Query {
         message: String
         projects: [Project]
@@ -82,29 +90,59 @@ const schema = buildSchema(`
     }
 `);
 
-// 2. The Root Resolver: Functions that actually get the data
+// Define Resolvers
 const root = {
-    // specific field
     message: () => "Hello from GraphQL!",
-    
-    // returns all projects (re-using our readData function from before!)
     projects: async () => {
         return await readData();
     },
-    
-    // returns a single project by ID
     project: async ({ id }) => {
         const data = await readData();
         return data.find(p => p.id === id);
     }
 };
 
-// 3. The Endpoint: Where the magic happens
+// Mount GraphQL Endpoint
 app.use('/graphql', graphqlHTTP({
     schema: schema,
     rootValue: root,
-    graphiql: true // This enables a cool visual testing tool in the browser
+    graphiql: true
 }));
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+
+// --- WEBSOCKET SETUP ---
+
+// 1. Create raw HTTP server from Express app
+const server = http.createServer(app);
+
+// 2. Create WebSocket server attached to HTTP server
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', (socket) => {
+    console.log('New WebSocket Client Connected!');
+    
+    // Send welcome message
+    socket.send(JSON.stringify({ type: 'info', message: 'Connected to Real-Time Server' }));
+
+    socket.on('message', (message) => {
+        console.log(`Received via WS: ${message}`);
+        
+        // Broadcast to all clients
+        wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: 'broadcast',
+                    content: `Broadcast: ${message}`
+                }));
+            }
+        });
+    });
+});
+
+// --- START SERVER ---
+// Important: Use server.listen, not app.listen, to support both HTTP and WS
+server.listen(PORT, () => {
+    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+    console.log(`   - REST:      http://localhost:${PORT}/api/projects`);
+    console.log(`   - GraphQL:   http://localhost:${PORT}/graphql`);
+    console.log(`   - WebSocket: ws://localhost:${PORT}\n`);
 });

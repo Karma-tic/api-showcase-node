@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Tester</title>
+</head>
+<body>
+    <h1>Real-Time WebSocket Tester</h1>
+    <button onclick="connect()">Connect to Server</button>
+    <br><br>
+    <input type="text" id="msgInput" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+    
+    <h3>Messages:</h3>
+    <ul id="messages"></ul>
+
+    <script>
+        let socket;
+
+        function connect() {
+            // Note the protocol is ws:// not http://
+            socket = new WebSocket('ws://localhost:3000');
+
+            socket.onopen = () => {
+                alert("Connected!");
+                document.getElementById('messages').innerHTML += "<li><em>Connected to server</em></li>";
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const li = document.createElement('li');
+                li.innerText = data.message || data.content;
+                document.getElementById('messages').appendChild(li);
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msgInput');
+            socket.send(input.value);
+            input.value = '';
+        }
+    </script>
+</body>
+</html>
